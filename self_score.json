@@ -1,0 +1,41 @@
+{
+  "nrmse_per_target": {
+    "P80": 0.17596713415113424,
+    "R50_fines": 0.37432441422945745,
+    "R50_oversize": 0.42337112417679484,
+    "R95": 0.36110398643186326,
+    "fines_frac": 0.24972972209683306,
+    "oversize_frac": 0.12712269798470885
+  },
+  "nrmse_composite": 0.2852698465117986,
+  "ensemble_weights": {
+    "rf": {
+      "P80": 0.9,
+      "R50_fines": 0.8,
+      "R50_oversize": 0.9,
+      "R95": 0.9,
+      "fines_frac": 1,
+      "oversize_frac": 0.9
+    },
+    "knn": {
+      "P80": 0,
+      "R50_fines": 0.2,
+      "R50_oversize": 0.1,
+      "R95": 0.1,
+      "fines_frac": 0,
+      "oversize_frac": 0
+    },
+    "linear": {
+      "P80": 0.1,
+      "R50_fines": 0,
+      "R50_oversize": 0,
+      "R95": 0,
+      "fines_frac": 0,
+      "oversize_frac": 0.1
+    }
+  },
+  "holdout_rows": 586,
+  "train_rows": 2344,
+  "test_rows": 492,
+  "timestamp": "2026-04-19T18:13:45Z"
+}

@@ -1,0 +1,34 @@
+# Go build artefacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Competition data (do NOT commit — Freelancer's)
+/data/
+src/data/
+
+# Local generated outputs inside src/ (canonical copies live at repo root)
+src/prediction_submission.csv
+src/design_submission.csv
+src/self_score.json
+src/SUBMISSION_READY.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
