@@ -1,0 +1,26 @@
+{
+  "baseline_go": 0.2853,
+  "xgb_untuned": 0.052461115469481616,
+  "lgbm_untuned": 0.052606370977197586,
+  "cat_untuned": 0.05066739948664021,
+  "avg3": 0.05107242692199724,
+  "stack_ridge": 0.05109014453904833,
+  "per_target_best": 0.05040414041716613,
+  "per_target_best_choice": {
+    "P80": "stack",
+    "fines_frac": "cat",
+    "oversize_frac": "cat",
+    "R95": "stack",
+    "R50_fines": "cat",
+    "R50_oversize": "cat"
+  },
+  "per_target_nrmse": {
+    "P80": 0.03890289893461484,
+    "fines_frac": 0.04555317309139754,
+    "oversize_frac": 0.037047736756379956,
+    "R95": 0.05174085034754928,
+    "R50_fines": 0.06865225065726954,
+    "R50_oversize": 0.060527932715785646
+  },
+  "time_sec": 2903.8940527439117
+}

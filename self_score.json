@@ -1,41 +1,37 @@
 {
   "nrmse_per_target": {
-    "P80": 0.17596713415113424,
-    "R50_fines": 0.37432441422945745,
-    "R50_oversize": 0.42337112417679484,
-    "R95": 0.36110398643186326,
-    "fines_frac": 0.24972972209683306,
-    "oversize_frac": 0.12712269798470885
+    "P80": 0.03890289893461484,
+    "fines_frac": 0.04555317309139754,
+    "oversize_frac": 0.037047736756379956,
+    "R95": 0.05174085034754928,
+    "R50_fines": 0.06865225065726954,
+    "R50_oversize": 0.060527932715785646
   },
-  "nrmse_composite": 0.2852698465117986,
-  "ensemble_weights": {
-    "rf": {
-      "P80": 0.9,
-      "R50_fines": 0.8,
-      "R50_oversize": 0.9,
-      "R95": 0.9,
-      "fines_frac": 1,
-      "oversize_frac": 0.9
-    },
-    "knn": {
-      "P80": 0,
-      "R50_fines": 0.2,
-      "R50_oversize": 0.1,
-      "R95": 0.1,
-      "fines_frac": 0,
-      "oversize_frac": 0
-    },
-    "linear": {
-      "P80": 0.1,
-      "R50_fines": 0,
-      "R50_oversize": 0,
-      "R95": 0,
-      "fines_frac": 0,
-      "oversize_frac": 0.1
-    }
+  "nrmse_composite": 0.05040414041716613,
+  "strategy": "per_target_best",
+  "per_target_strategy": {
+    "P80": "stack",
+    "fines_frac": "cat",
+    "oversize_frac": "cat",
+    "R95": "stack",
+    "R50_fines": "cat",
+    "R50_oversize": "cat"
   },
+  "baseline_reference": 0.2853,
+  "delta_vs_baseline": 0.23489585958283387,
+  "improvement_factor": 5.66,
   "holdout_rows": 586,
   "train_rows": 2344,
   "test_rows": 492,
-  "timestamp": "2026-04-19T18:13:45Z"
+  "holdout_seed": 42,
+  "holdout_frac": 0.2,
+  "candidate_strategies": {
+    "xgb_untuned": 0.052461115469481616,
+    "lgbm_untuned": 0.052606370977197586,
+    "cat_untuned": 0.05066739948664021,
+    "avg3": 0.05107242692199724,
+    "stack_ridge": 0.05109014453904833,
+    "per_target_best": 0.05040414041716613
+  },
+  "timestamp": "2026-04-20T12:00:00Z"
 }
