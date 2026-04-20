@@ -41,7 +41,7 @@ diff self_score.json           ../self_score.json
 
 ## Expected runtime
 
-On a modern laptop (8-core, SSD) the whole pipeline — load, 80/20 split, train RF+KNN+Ridge, grid-search per-target weights, refit on full data, predict, inverse-design, write CSVs — runs in well under a minute. No GPU, no external dependencies, no network calls after `go mod download` (and the go.mod has zero non-stdlib imports anyway).
+On a modern laptop (8-core, SSD) the whole harness pipeline — load, 5-fold OOF across 4 adepts (RF+GBM+KNN+ridge), per-target simplex weight search, refit on full data, predict, inverse-design, write CSVs — completes in a few minutes. No GPU, no external dependencies, no network calls after `go mod download` (and the go.mod has zero non-stdlib imports anyway).
 
 ## What the pipeline prints
 

@@ -53,15 +53,31 @@ const (
 )
 
 const (
-	nFeatures = 8
-	nTargets  = 6
-	nDesigns  = 20
+	nFeatures   = 8
+	nTargets    = 6
+	nDesigns    = 20
 	holdoutFrac = 0.2
 	knnK        = 10
-	rfTrees     = 80
-	rfMinLeaf   = 5
-	rfFeatSub   = 4 // random features per split
-	seed        = 42
+
+	// Random forest adept
+	rfTrees    = 200
+	rfMinLeaf  = 3
+	rfFeatSub  = 4 // random features per split
+	rfMaxDepth = 20
+
+	// Gradient boosting adept
+	gbmRounds    = 300
+	gbmMaxDepth  = 4
+	gbmMinLeaf   = 10
+	gbmFeatSub   = 6
+	gbmShrink    = 0.05
+	gbmSubsample = 0.8
+
+	// Wren harness
+	kFolds          = 5
+	weightGridSteps = 10 // 0.1 grid; compositions over 4 substrates = 286 per target
+
+	seed = 42
 )
 
 // -----------------------------------------------------------------------------
@@ -377,8 +393,8 @@ type rfTree struct {
 }
 
 // Build one tree on the given indices sample. features to try per split = featSub.
-func buildTree(X [][]float64, y []float64, idx []int, minLeaf, featSub int, rng *rand.Rand) *rfTree {
-	root := growNode(X, y, idx, minLeaf, featSub, rng, 0, 16)
+func buildTree(X [][]float64, y []float64, idx []int, minLeaf, featSub, maxDepth int, rng *rand.Rand) *rfTree {
+	root := growNode(X, y, idx, minLeaf, featSub, rng, 0, maxDepth)
 	return &rfTree{root: root}
 }
 
@@ -524,7 +540,7 @@ type rfMultiOutput struct {
 	forests [][]*rfTree
 }
 
-func fitRF(X [][]float64, Y [][]float64, nTrees, minLeaf, featSub int, rng *rand.Rand) *rfMultiOutput {
+func fitRF(X [][]float64, Y [][]float64, nTrees, minLeaf, featSub, maxDepth int, rng *rand.Rand) *rfMultiOutput {
 	nt := len(Y[0])
 	n := len(X)
 	out := &rfMultiOutput{forests: make([][]*rfTree, nt)}
@@ -541,7 +557,7 @@ func fitRF(X [][]float64, Y [][]float64, nTrees, minLeaf, featSub int, rng *rand
 			for i := 0; i < n; i++ {
 				sample[i] = rng.Intn(n)
 			}
-			trees[b] = buildTree(X, y, sample, minLeaf, featSub, rng)
+			trees[b] = buildTree(X, y, sample, minLeaf, featSub, maxDepth, rng)
 		}
 		out.forests[t] = trees
 	}
@@ -556,34 +572,6 @@ func (r *rfMultiOutput) predict(x []float64) []float64 {
 			s += tr.predict(x)
 		}
 		out[t] = s / float64(len(trees))
-	}
-	return out
-}
-
-// -----------------------------------------------------------------------------
-// Ensemble
-// -----------------------------------------------------------------------------
-
-type ensemble struct {
-	rf  *rfMultiOutput
-	knn *knnModel
-	lin *linearModel
-	linSc *scaler
-	// per-target weights (sum to 1 per target)
-	wRF, wKNN, wLin []float64
-}
-
-func (e *ensemble) predict(x []float64) []float64 {
-	pRF := e.rf.predict(x)
-	pKNN := e.knn.predict(x)
-	xs := make([]float64, len(x))
-	for j, v := range x {
-		xs[j] = (v - e.linSc.mean[j]) / e.linSc.std[j]
-	}
-	pLin := e.lin.predict(xs)
-	out := make([]float64, nTargets)
-	for t := 0; t < nTargets; t++ {
-		out[t] = e.wRF[t]*pRF[t] + e.wKNN[t]*pKNN[t] + e.wLin[t]*pLin[t]
 	}
 	return out
 }
@@ -733,37 +721,6 @@ func shuffleIndices(n int, rng *rand.Rand) []int {
 	return idx
 }
 
-func tuneWeights(Yval [][]float64, pRF, pKNN, pLin [][]float64) ([]float64, []float64, []float64) {
-	// grid search per target for (wRF, wKNN, wLin) with sum=1, step 0.1
-	wR := make([]float64, nTargets)
-	wK := make([]float64, nTargets)
-	wL := make([]float64, nTargets)
-	for t := 0; t < nTargets; t++ {
-		best := math.Inf(1)
-		var br, bk, bl float64
-		for a := 0; a <= 10; a++ {
-			for b := 0; b+a <= 10; b++ {
-				c := 10 - a - b
-				ar := float64(a) / 10.0
-				ak := float64(b) / 10.0
-				al := float64(c) / 10.0
-				var se float64
-				for i := range Yval {
-					p := ar*pRF[i][t] + ak*pKNN[i][t] + al*pLin[i][t]
-					d := p - Yval[i][t]
-					se += d * d
-				}
-				if se < best {
-					best = se
-					br, bk, bl = ar, ak, al
-				}
-			}
-		}
-		wR[t], wK[t], wL[t] = br, bk, bl
-	}
-	return wR, wK, wL
-}
-
 // -----------------------------------------------------------------------------
 // main
 // -----------------------------------------------------------------------------
@@ -775,11 +732,14 @@ type selfScoreOut struct {
 		RF     map[string]float64 `json:"rf"`
 		KNN    map[string]float64 `json:"knn"`
 		Linear map[string]float64 `json:"linear"`
+		GBM    map[string]float64 `json:"gbm"`
 	} `json:"ensemble_weights"`
-	HoldoutRows int `json:"holdout_rows"`
-	TrainRows   int `json:"train_rows"`
-	TestRows    int `json:"test_rows"`
-	Timestamp   string `json:"timestamp"`
+	KFolds        int      `json:"examiner_kfolds"`
+	LogTargets    []string `json:"log_transformed_targets"`
+	TrainRows     int      `json:"train_rows"`
+	TestRows      int      `json:"test_rows"`
+	HoldoutRows   int      `json:"oof_rows"`
+	Timestamp     string   `json:"timestamp"`
 }
 
 func main() {
@@ -822,84 +782,81 @@ func main() {
 	fmt.Printf("[boom-submit] train=%d test=%d features=%d targets=%d\n",
 		len(Xall), len(Xtest), nFeatures, nTargets)
 
-	// --- train/holdout split ---
-	rng := rand.New(rand.NewSource(seed))
-	order := shuffleIndices(len(Xall), rng)
-	holdN := int(float64(len(Xall)) * holdoutFrac)
-	trainIdx := order[holdN:]
-	holdIdx := order[:holdN]
-
-	Xtr := gather(Xall, trainIdx)
-	Ytr := gather(Yall, trainIdx)
-	Xh := gather(Xall, holdIdx)
-	Yh := gather(Yall, holdIdx)
-
-	// --- fit models on training split ---
-	fmt.Println("[boom-submit] fitting random forest on train split...")
-	rfRng := rand.New(rand.NewSource(seed + 1))
-	rfModel := fitRF(Xtr, Ytr, rfTrees, rfMinLeaf, rfFeatSub, rfRng)
-
-	fmt.Println("[boom-submit] fitting knn...")
-	knnModel := fitKNN(Xtr, Ytr, knnK)
-
-	fmt.Println("[boom-submit] fitting linear ridge...")
-	linSc := fitScaler(Xtr)
-	XtrS := linSc.transform(Xtr)
-	linModel := fitLinear(XtrS, Ytr, 1.0)
-
-	// --- predict on holdout, tune weights ---
-	pRFH := make([][]float64, len(Xh))
-	pKNNH := make([][]float64, len(Xh))
-	pLinH := make([][]float64, len(Xh))
-	for i, x := range Xh {
-		pRFH[i] = rfModel.predict(x)
-		pKNNH[i] = knnModel.predict(x)
-		xs := make([]float64, len(x))
-		for j, v := range x {
-			xs[j] = (v - linSc.mean[j]) / linSc.std[j]
+	// --- Wren harness: log-transform heavy-tailed targets, then K-fold OOF ---
+	mask := logTargetMask()
+	var logCols []string
+	for t, b := range mask {
+		if b {
+			logCols = append(logCols, targetOrder[t])
 		}
-		pLinH[i] = linModel.predict(xs)
 	}
-	wR, wK, wL := tuneWeights(Yh, pRFH, pKNNH, pLinH)
-	fmt.Printf("[boom-submit] ensemble weights (rf/knn/lin) per target:\n")
+	Ylog := applyLogTargets(Yall, mask)
+
+	// Register adepts. Each will be fit K times (once per fold) for OOF, then
+	// once more on the full dataset for the promoted ensemble.
+	subs := []Substrate{
+		newRFSubstrate(rfTrees, rfMinLeaf, rfFeatSub, rfMaxDepth),
+		newKNNSubstrate(knnK),
+		newLinearSubstrate(1.0),
+		newGBMSubstrate(gbmRounds, gbmMaxDepth, gbmMinLeaf, gbmFeatSub, gbmShrink, gbmSubsample),
+	}
+
+	fmt.Printf("[boom-submit] harness: %d substrates, %d-fold OOF, log targets=%v\n",
+		len(subs), kFolds, logCols)
+
+	oofPreds := make([][][]float64, len(subs))
+	for m, sub := range subs {
+		fmt.Printf("[boom-submit]   examiner fold-sweep: %s\n", sub.Name())
+		foldRng := rand.New(rand.NewSource(int64(seed + 10 + m)))
+		oofPreds[m] = kfoldOOF(sub, Xall, Ylog, kFolds, foldRng)
+	}
+
+	// --- promotion: per-target non-negative simplex grid search on OOF preds ---
+	W := tuneWeightsK(Yall, oofPreds, mask, weightGridSteps)
+	fmt.Printf("[boom-submit] promoted weights per target:\n")
+	fmt.Printf("  %-14s", "target")
+	for _, s := range subs {
+		fmt.Printf(" %6s", s.Name())
+	}
+	fmt.Println()
 	for t := 0; t < nTargets; t++ {
-		fmt.Printf("  %-14s rf=%.1f knn=%.1f lin=%.1f\n", targetOrder[t], wR[t], wK[t], wL[t])
+		fmt.Printf("  %-14s", targetOrder[t])
+		for m := range subs {
+			fmt.Printf(" %6.2f", W[m][t])
+		}
+		fmt.Println()
 	}
 
-	// composite ensemble predictions on holdout
-	Yens := make([][]float64, len(Xh))
-	for i := range Xh {
+	// OOF composite NRMSE in raw target space
+	Yoof := make([][]float64, len(Xall))
+	for i := range Xall {
 		row := make([]float64, nTargets)
-		for t := 0; t < nTargets; t++ {
-			row[t] = wR[t]*pRFH[i][t] + wK[t]*pKNNH[i][t] + wL[t]*pLinH[i][t]
+		for m := range subs {
+			decoded := invertLogRow(oofPreds[m][i], mask)
+			for t := 0; t < nTargets; t++ {
+				row[t] += W[m][t] * decoded[t]
+			}
 		}
-		Yens[i] = row
+		Yoof[i] = row
 	}
-	perTgt := nrmsePerTarget(Yh, Yens)
+	perTgt := nrmsePerTarget(Yall, Yoof)
 	var composite float64
 	for _, v := range perTgt {
 		composite += v
 	}
 	composite /= float64(len(perTgt))
-	fmt.Printf("[boom-submit] self-score NRMSE composite = %.4f\n", composite)
+	fmt.Printf("[boom-submit] OOF NRMSE composite = %.4f\n", composite)
 	for t, v := range perTgt {
 		fmt.Printf("  %-14s nrmse=%.4f\n", targetOrder[t], v)
 	}
 
-	// --- refit ensemble on ALL training data for final predictions ---
-	fmt.Println("[boom-submit] refitting models on FULL train data for final predictions...")
-	rfRng2 := rand.New(rand.NewSource(seed + 2))
-	rfFull := fitRF(Xall, Yall, rfTrees, rfMinLeaf, rfFeatSub, rfRng2)
-	knnFull := fitKNN(Xall, Yall, knnK)
-	linScFull := fitScaler(Xall)
-	XallS := linScFull.transform(Xall)
-	linFull := fitLinear(XallS, Yall, 1.0)
-
-	ens := &ensemble{
-		rf: rfFull, knn: knnFull, lin: linFull,
-		linSc: linScFull,
-		wRF: wR, wKNN: wK, wLin: wL,
+	// --- refit every adept on FULL data in log-transformed space ---
+	fmt.Println("[boom-submit] refitting adepts on FULL train data...")
+	for m, sub := range subs {
+		subRng := rand.New(rand.NewSource(int64(seed + 100 + m)))
+		sub.Fit(Xall, Ylog, subRng)
 	}
+	ens := &wrenEnsemble{subs: subs, W: W, mask: mask}
 
 	// --- generate predictions for test scenarios ---
 	fmt.Printf("[boom-submit] generating predictions for %d test scenarios...\n", len(Xtest))
@@ -1071,12 +1028,14 @@ func main() {
 
 	// --- self_score.json ---
 	sc := selfScoreOut{
-		PerTarget: map[string]float64{},
-		Composite: composite,
-		HoldoutRows: len(Xh),
-		TrainRows: len(Xtr),
-		TestRows: len(Xtest),
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		PerTarget:   map[string]float64{},
+		Composite:   composite,
+		KFolds:      kFolds,
+		LogTargets:  logCols,
+		TrainRows:   len(Xall),
+		TestRows:    len(Xtest),
+		HoldoutRows: len(Xall), // OOF covers every training row exactly once
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 	}
 	for t, v := range perTgt {
 		sc.PerTarget[targetOrder[t]] = v
@@ -1084,10 +1043,16 @@ func main() {
 	sc.Weights.RF = map[string]float64{}
 	sc.Weights.KNN = map[string]float64{}
 	sc.Weights.Linear = map[string]float64{}
+	sc.Weights.GBM = map[string]float64{}
+	subIdx := map[string]int{}
+	for i, s := range subs {
+		subIdx[s.Name()] = i
+	}
 	for t := 0; t < nTargets; t++ {
-		sc.Weights.RF[targetOrder[t]] = wR[t]
-		sc.Weights.KNN[targetOrder[t]] = wK[t]
-		sc.Weights.Linear[targetOrder[t]] = wL[t]
+		sc.Weights.RF[targetOrder[t]] = W[subIdx["rf"]][t]
+		sc.Weights.KNN[targetOrder[t]] = W[subIdx["knn"]][t]
+		sc.Weights.Linear[targetOrder[t]] = W[subIdx["linear"]][t]
+		sc.Weights.GBM[targetOrder[t]] = W[subIdx["gbm"]][t]
 	}
 	ssBytes, _ := json.MarshalIndent(sc, "", "  ")
 	must(os.WriteFile(filepath.Join(outDir, "self_score.json"), ssBytes, 0o644))
@@ -1144,20 +1109,25 @@ func die(err error) {
 func buildSubmissionReadyMD(sc selfScoreOut, allInBounds bool, nDes, nValid int, predPath, designPath string) string {
 	s := "# Boom: Trajectory Unknown - TARDIS Submission Ready\n\n"
 	s += fmt.Sprintf("Generated: %s\n\n", sc.Timestamp)
-	s += "## Ensemble\n\n"
-	s += "Three models, weighted per target by grid search on a 20% holdout:\n\n"
-	s += "- Random Forest: 80 bagged regression trees (min-leaf=5, feature subsampling=4-of-8, max-depth=16).\n"
-	s += "- k-Nearest-Neighbours: k=10 on standardised inputs with inverse-distance weighting.\n"
+	s += "## Wren ensemble\n\n"
+	s += fmt.Sprintf("Four adepts, promoted by per-target simplex grid search over %d-fold out-of-fold predictions.\n", sc.KFolds)
+	s += fmt.Sprintf("Heavy-tailed distance targets (%v) are learned in log1p space and inverted before scoring.\n\n",
+		sc.LogTargets)
+	s += fmt.Sprintf("- Random Forest: %d bagged regression trees (min-leaf=%d, feature subsample=%d-of-%d, max-depth=%d).\n",
+		rfTrees, rfMinLeaf, rfFeatSub, nFeatures, rfMaxDepth)
+	s += fmt.Sprintf("- Gradient-Boosted Trees: %d rounds, depth=%d, min-leaf=%d, shrinkage=%.2f, subsample=%.2f.\n",
+		gbmRounds, gbmMaxDepth, gbmMinLeaf, gbmShrink, gbmSubsample)
+	s += fmt.Sprintf("- k-Nearest-Neighbours: k=%d on standardised inputs with inverse-distance weighting.\n", knnK)
 	s += "- Linear ridge (lambda=1) on standardised inputs as baseline/sanity.\n\n"
-	s += "| target | weight_rf | weight_knn | weight_linear | nrmse_holdout |\n"
-	s += "|---|---|---|---|---|\n"
+	s += "| target | weight_rf | weight_gbm | weight_knn | weight_linear | nrmse_oof |\n"
+	s += "|---|---|---|---|---|---|\n"
 	for _, name := range targetOrder {
-		s += fmt.Sprintf("| %s | %.1f | %.1f | %.1f | %.4f |\n",
-			name, sc.Weights.RF[name], sc.Weights.KNN[name], sc.Weights.Linear[name], sc.PerTarget[name])
+		s += fmt.Sprintf("| %s | %.2f | %.2f | %.2f | %.2f | %.4f |\n",
+			name, sc.Weights.RF[name], sc.Weights.GBM[name], sc.Weights.KNN[name], sc.Weights.Linear[name], sc.PerTarget[name])
 	}
-	s += fmt.Sprintf("\n**Composite (mean NRMSE across 6 targets, 20%% holdout): %.4f**\n", sc.Composite)
-	s += fmt.Sprintf("(train split n=%d, holdout n=%d, final predictors refit on full n=%d, test scenarios n=%d)\n\n",
-		sc.TrainRows, sc.HoldoutRows, sc.TrainRows+sc.HoldoutRows, sc.TestRows)
+	s += fmt.Sprintf("\n**Composite (mean NRMSE across 6 targets, %d-fold OOF): %.4f**\n", sc.KFolds, sc.Composite)
+	s += fmt.Sprintf("(full train n=%d, OOF rows n=%d, final predictors refit on full n=%d, test scenarios n=%d)\n\n",
+		sc.TrainRows, sc.HoldoutRows, sc.TrainRows, sc.TestRows)
 	s += "## Inverse design\n\n"
 	s += fmt.Sprintf("- Training samples already satisfying `96 <= P80 <= 101` and `R95 <= 175`: **%d**.\n", nValid)
 	if nValid >= nDesigns {
