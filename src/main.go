@@ -45,6 +45,18 @@ var designFeatureOrder = []string{
 	"porosity", "gravity", "atmosphere", "shape_factor",
 }
 
+// logTargetMask returns true for Boom targets where log1p compresses the tail.
+// Heavy-tailed R-family distances (R95, R50_fines, R50_oversize) only.
+func logTargetMask() []bool {
+	out := make([]bool, nTargets)
+	for t, name := range targetOrder {
+		if name == "R95" || name == "R50_fines" || name == "R50_oversize" {
+			out[t] = true
+		}
+	}
+	return out
+}
+
 // Constraint thresholds (from data/constraints.json).
 const (
 	p80Min = 96.0
@@ -856,7 +868,7 @@ func main() {
 		subRng := rand.New(rand.NewSource(int64(seed + 100 + m)))
 		sub.Fit(Xall, Ylog, subRng)
 	}
-	ens := &wrenEnsemble{subs: subs, W: W, mask: mask}
+	ens := &wrenEnsemble{subs: subs, W: W, mask: mask, numTargets: nTargets}
 
 	// --- generate predictions for test scenarios ---
 	fmt.Printf("[boom-submit] generating predictions for %d test scenarios...\n", len(Xtest))

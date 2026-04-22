@@ -198,21 +198,8 @@ func (g *gbmMultiOutput) predict(x []float64) []float64 {
 }
 
 // -----------------------------------------------------------------------------
-// Per-target log1p transform (heavy-tailed distance targets only)
+// Per-target log1p transform (heavy-tailed targets)
 // -----------------------------------------------------------------------------
-
-// logTargetMask returns true for targets where log1p helps.
-// Heavy-tailed R-family distances (R95, R50_fines, R50_oversize) have their
-// upper tails compressed; bounded fractions and P80 stay in raw space.
-func logTargetMask() []bool {
-	out := make([]bool, nTargets)
-	for t, name := range targetOrder {
-		if name == "R95" || name == "R50_fines" || name == "R50_oversize" {
-			out[t] = true
-		}
-	}
-	return out
-}
 
 func applyLogTargets(Y [][]float64, mask []bool) [][]float64 {
 	out := make([][]float64, len(Y))
@@ -369,9 +356,10 @@ func enumerateCompositions(K, steps int) [][]int {
 // -----------------------------------------------------------------------------
 
 type wrenEnsemble struct {
-	subs []Substrate
-	W    [][]float64 // W[substrate][target]
-	mask []bool
+	subs       []Substrate
+	W          [][]float64 // W[substrate][target]
+	mask       []bool
+	numTargets int
 }
 
 func (e *wrenEnsemble) predict(x []float64) []float64 {
@@ -380,8 +368,8 @@ func (e *wrenEnsemble) predict(x []float64) []float64 {
 	for m, s := range e.subs {
 		decoded[m] = invertLogRow(s.Predict(x), e.mask)
 	}
-	out := make([]float64, nTargets)
-	for t := 0; t < nTargets; t++ {
+	out := make([]float64, e.numTargets)
+	for t := 0; t < e.numTargets; t++ {
 		for m := 0; m < K; m++ {
 			out[t] += e.W[m][t] * decoded[m][t]
 		}
