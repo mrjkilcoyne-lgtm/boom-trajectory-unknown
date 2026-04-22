@@ -1,37 +1,48 @@
 {
-  "nrmse_per_target": {
-    "P80": 0.03890289893461484,
-    "fines_frac": 0.04555317309139754,
+  "composite_nrmse": 0.050098726398648624,
+  "per_target_nrmse": {
+    "P80": 0.03913710138775853,
+    "fines_frac": 0.04502411496202966,
     "oversize_frac": 0.037047736756379956,
-    "R95": 0.05174085034754928,
+    "R95": 0.051304619098944876,
     "R50_fines": 0.06865225065726954,
-    "R50_oversize": 0.060527932715785646
+    "R50_oversize": 0.05942653552950917
   },
-  "nrmse_composite": 0.05040414041716613,
-  "strategy": "per_target_best",
-  "per_target_strategy": {
-    "P80": "stack",
+  "per_target_variant": {
+    "P80": "V1",
+    "fines_frac": "V1",
+    "oversize_frac": "V0",
+    "R95": "V2",
+    "R50_fines": "V0",
+    "R50_oversize": "V2"
+  },
+  "per_target_model": {
+    "P80": "avg",
     "fines_frac": "cat",
     "oversize_frac": "cat",
-    "R95": "stack",
+    "R95": "cat",
     "R50_fines": "cat",
     "R50_oversize": "cat"
   },
-  "baseline_reference": 0.2853,
-  "delta_vs_baseline": 0.23489585958283387,
-  "improvement_factor": 5.66,
-  "holdout_rows": 586,
-  "train_rows": 2344,
-  "test_rows": 492,
+  "v2_baseline_reference": 0.0504,
+  "v2_per_target_reference": {
+    "P80": 0.0389,
+    "fines_frac": 0.0456,
+    "oversize_frac": 0.037,
+    "R95": 0.0517,
+    "R50_fines": 0.0687,
+    "R50_oversize": 0.0605
+  },
+  "delta_vs_v2": 0.00030127360135137615,
   "holdout_seed": 42,
   "holdout_frac": 0.2,
-  "candidate_strategies": {
-    "xgb_untuned": 0.052461115469481616,
-    "lgbm_untuned": 0.052606370977197586,
-    "cat_untuned": 0.05066739948664021,
-    "avg3": 0.05107242692199724,
-    "stack_ridge": 0.05109014453904833,
-    "per_target_best": 0.05040414041716613
+  "pi2_median": 2.8619790506247216,
+  "ablation": {
+    "V0_v2_recomputed": 0.05051761869222071,
+    "V1_v2_plus_tardis": 0.05054587599098579,
+    "V2_plus_regime_flag": 0.05031049811187047,
+    "V3_regime_separation": 0.052917420891594825,
+    "V4_per_target_best": 0.050098726398648624
   },
-  "timestamp": "2026-04-20T12:00:00Z"
+  "notes": "inverse design used XGB-only forward models for speed; composite NRMSE measured on holdout uses avg/cat ensembles per the ablation."
 }
